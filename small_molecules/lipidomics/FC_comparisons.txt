@@ -1,0 +1,4 @@
+fc_comparison	x_axis	y_axis
+1	Group 27 vs Group 30	Group 27 vs Group 33
+2	Group 27 vs Group 36	Group 30 vs Group 33
+3	Group 30 vs Group 36	Group 33 vs Group 36
