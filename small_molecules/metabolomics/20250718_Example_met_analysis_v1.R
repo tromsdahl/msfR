@@ -46,7 +46,7 @@ met_data <- setDT(read.delim("met_data.txt"))
 # Tip: change sample_type %in% c(...)  to !(sample_type %in% c(...)) if you want to exclude samples
 met_data <- met_data[sample_type %in% c("Group 27", "Group 30", "Group 33", "Group 36", "Pooled QC", "Ext PQC"), ]
 
-# normalize data to internal standard and protein concentration
+# normalize data to internal standard and sample starting amount (e.g. protein concentration, tissue weight, cell no., etc)
 met_data_is <- met_data[component_name == is_normalize, ]
 norm_met_data <- met_data[is == "n", ]
 
@@ -69,12 +69,13 @@ norm_met_data_metabo <- norm_met_data_metabo[, .SD, .SDcols = function(x){!(all(
 write.table(norm_met_data_metabo, paste0(prefix,"norm_data_metabo.txt"), quote = F, row.names = F, sep = "\t")
 
 
-
+#============================================================================
 # STATISTICAL WORKFLOW
+#============================================================================
 met_data_stats <- melt(norm_met_data_metabo, id.vars = 1:2, variable.name = "component_name", value.name = "norm_area")
-met_data_stats <- met_data_stats[norm_area == 0, norm_area := NA] # Skyline sometimes sets values to zero, but these should be NA
+met_data_stats[norm_area == 0, norm_area := NA] # Skyline sometimes sets values to zero, but these should be NA
 
-# remove lipids with missing values
+# remove lipids/metabolites with missing values
 # Function to remove lipids/metabolites where 2/3 of replicates of one group are missing within a paired comparison
 comparisons <- read.delim(group_comparisons)
 
@@ -84,13 +85,13 @@ for (i in seq_along(comparisons[,1])) {
   # select data for groups within comparison
   group_data <- met_data_stats[sample_type %in% c(comparisons[i,2], comparisons[i,3])]
   
-  # count how many lipids per sample group are missing, and how many samples there are per group
+  # count how many lipids/metabolites per sample group are missing, and how many samples there are per group
   group_1_ct <- length(unique(group_data[sample_type == comparisons[i,2]]$sample_name)) # number of replicates in group 1
   group_2_ct <- length(unique(group_data[sample_type == comparisons[i,3]]$sample_name)) # number of replicates in group 2
   missing_ct <- group_data[is.na(norm_area), .N, by = .(sample_type, component_name)] # count number of missing values per metabolite/lipid
   met_remove <- unique(as.character(missing_ct[N >= ((2/3) * group_1_ct) | N >= ((2/3) * group_2_ct)]$component_name)) # identify which lipids/metabolites are missing in at least 2/3 of either sample group
   
-  # remove the selected lipids for the particular groups from the met_data_stats table and add to filtering table list
+  # remove the selected lipids/metabolites for the particular groups from the met_data_stats table and add to filtering table list
   filtering_table[[i]] <- met_data_stats[sample_type %in% c(comparisons[i,2], comparisons[i,3]) & !(component_name %in% met_remove), ]
   
 }
@@ -112,7 +113,9 @@ met_data_stats <- unique(met_data_stats)
 met_data_subquant <- dcast(met_data_stats, component_name ~ sample_name, value.var = "norm_area")
 
 
+#============================================================================
 # CORRELATION HEATMAP
+#============================================================================
 met_data_corr <- sapply(met_data_subquant[, 2:ncol(met_data_subquant)], log10)
 row.names(met_data_corr) <- met_data_subquant$component_name
 
@@ -125,7 +128,9 @@ heatmap.2(x = cormat, col = colorpalette(100), trace = "none", density.info = "n
 dev.off()
 
 
+#============================================================================
 # METABOLITE/LIPID COUNT
+#============================================================================
 # count number of metabolites/lipids per sample
 met_count <- met_data_stats[!(is.na(norm_area)), .N, by = .(sample_name, sample_type)]
 
@@ -146,7 +151,9 @@ ggplot(met_count_avgSD, aes(x = sample_type, y = avg_ct)) +
 ggsave(paste0(prefix, "met_count.png"), device = "png", dpi = 300, units = "in", width = 10, height = 6)
 
 
+#============================================================================
 # INTENSITIES OF METABOLITES (NORMALIZED) PER SAMPLE
+#============================================================================
 subquant_medians <- met_data_stats[, .(med_log_10_int = round(log10(median(norm_area, na.rm = T)), 2)), by = .(sample_name, sample_type)]
 
 # Plot normalized metabolite intensities
@@ -161,7 +168,9 @@ ggplot(met_data_stats, aes(x = sample_name, y = log10(norm_area))) +
 ggsave(paste0(prefix, "sample_intensities.png"), device = "png", dpi = 300, units = "in", width = 16, height = 6)
 
 
+#============================================================================
 # IMPUTATION AND LOG10 TRANSFORMATION
+#============================================================================
 # imputation by 1/5 of minimum value of metabolite across all samples
 imputate <- met_data_stats[!(grep("QC", sample_type)), .(imput = min(norm_area, na.rm = T) / 5), by = .(component_name)]
 met_data_stats[imputate, imput := i.imput, on = .(component_name)]
@@ -171,7 +180,9 @@ met_data_stats[is.na(norm_area), norm_area := imput]
 met_data_stats[, log10norm_area := log10(norm_area)]
 
 
+#============================================================================
 # PCA ANALYSIS
+#============================================================================
 # create transposed matrix for PCA
 met_data_pca_mat <- na.omit(dcast(met_data_stats, component_name ~ sample_name, value.var = "log10norm_area"))
 pca_mat_names <- met_data_pca_mat$component_name
@@ -203,7 +214,9 @@ ggplot(pcaplot, aes(x = PC1, y = PC2, fill = sample_type)) +
 ggsave(paste0(prefix,"PCA_plot_ul.png"), device = "png", dpi = 300, units = "in", width = 8, height = 8)
 
 
+#============================================================================
 # LOADINGS BIPLOT FOR PCA ANALYSIS
+#============================================================================
 # Create table with loadings data
 loading_table <- data.table(component_name = row.names(pca$rotation[,1:2]),
                             PC1 = pca$rotation[,1],
@@ -229,8 +242,10 @@ ggplot(pcaplot, aes(x = PC1, y = PC2)) +
 ggsave(paste0(prefix,"PCA_biplot.png"), device = "png", dpi = 300, units = "in", width = 8, height = 8)
 
 
+#============================================================================
 # GROUP COMPARISON STATISTICS
-# Function to calculat p, adj p, and log2FC for each comparison within the comparisons table
+#============================================================================
+# Function to calculate p, adj p, and log2FC for each comparison within the comparisons table
 # vectors to store values
 comparison_table <- vector("list", length(comparisons[,1]))
 names(comparison_table) <- comparisons[,1]
@@ -294,7 +309,9 @@ results <- rbindlist(unpack)
 write.table(results, paste0(prefix,"results.txt"), quote = F, row.names = F, sep = "\t")
 
 
-# VOLCANO PLOTS
+#============================================================================
+# VOLCANO PLOTS (p < 0.05)
+#============================================================================
 # using unadjusted p values
 results$volcano <- "NO CHANGE"
 
@@ -315,7 +332,9 @@ ggplot(results, aes(x = log2FC, y = -log10(p_value))) +
 ggsave(paste0(prefix, "volcano_unadj.png"), device = "png", dpi = 300, units = "in", width = 12, height = 6)
 
 
-# UPSET PLOT
+#============================================================================
+# UPSET PLOT (p < 0.05)
+#============================================================================
 # using unadjusted p values
 # change volcano values to logical
 results$volcano <- results$volcano %in% c("UP","DOWN")
@@ -334,7 +353,9 @@ upset(results_wide, intersect = unique(results$comparison))
 ggsave(paste0(prefix, "upset_plot_unadj.png"), device = "png", dpi = 300, units = "in", width = 12, height = 6)
 
 
-# 2nd VOLCANO PLOT
+#============================================================================
+# 2nd VOLCANO PLOT (adj p < 0.05)
+#============================================================================
 # using adj p value
 results$volcano <- NULL
 results$volcano <- "NO CHANGE"
@@ -356,7 +377,9 @@ ggplot(results, aes(x = log2FC, y = -log10(p_value))) +
 ggsave(paste0(prefix, "volcano_adj.png"), device = "png", dpi = 300, units = "in", width = 12, height = 6)
 
 
-# UPSET PLOT
+#============================================================================
+# UPSET PLOT (adj p < 0.05)
+#============================================================================
 # using adj p values
 # change volcano values to logical
 results$volcano <- results$volcano %in% c("UP","DOWN")
@@ -375,7 +398,9 @@ upset(results_wide, intersect = unique(results$comparison))
 ggsave(paste0(prefix, "upset_plot_adj.png"), device = "png", dpi = 300, units = "in", width = 12, height = 6)
 
 
+#============================================================================
 # SIGNIFICANTLY DIFFERENT METABOLITES (p < 0.05)
+#============================================================================
 # separate metabolites with p < 0.05
 results_sig <- results[p_value < pval_max, ]
 
@@ -394,10 +419,12 @@ ggplot(results_sig_ct, aes(x = comparison, y = N)) +
   ) +
   labs(x = "Comparison", y = "Sig. Metabolites (p < 0.05)") +
   scale_y_continuous(limits = c(0, max(results_sig_ct$N + 10)), expand = c(0,0))
-ggsave(paste0(prefix, "signif_lip.png"), device = "png", dpi = 300, units = "in", width = 12, height = 6)
+ggsave(paste0(prefix, "signif_met.png"), device = "png", dpi = 300, units = "in", width = 12, height = 6)
 
 
+#============================================================================
 # UPSET PLOT OF SIGNIFICANT METABOLITES (p < 0.05)
+#============================================================================
 # which metabolites are significant (p < 0.05)
 results$significant <- results$p_value < pval_max
 
@@ -412,10 +439,12 @@ results_wide <- results_wide[which(rowSums(results_wide, na.rm = T) > 0), ]
 
 # plot upset plot
 upset(results_wide, intersect = unique(results$comparison))
-ggsave(paste0(prefix, "upset_signif_lip.png"), device = "png", dpi = 300, units = "in", width = 12, height = 6)
+ggsave(paste0(prefix, "upset_signif_met.png"), device = "png", dpi = 300, units = "in", width = 12, height = 6)
 
 
+#============================================================================
 # SIGNIFICANTLY DIFFERENT METABOLITES (adj p < 0.05)
+#============================================================================
 # separate metabolites with adj p < 0.05
 results_sig <- results[p_adj < adj_pval_max, ]
 
@@ -434,10 +463,12 @@ ggplot(results_sig_ct, aes(x = comparison, y = N)) +
   ) +
   labs(x = "Comparison", y = "Sig. Metabolites (adj p < 0.05)") +
   scale_y_continuous(limits = c(0,max(results_sig_ct$N + 10)), expand = c(0,0))
-ggsave(paste0(prefix, "signif_lip_adj.png"), device = "png", dpi = 300, units = "in", width = 12, height = 6)
+ggsave(paste0(prefix, "signif_met_adj.png"), device = "png", dpi = 300, units = "in", width = 12, height = 6)
 
 
+#============================================================================
 # UPSET PLOT OF SIGNIFICANT METABOLITES (adj p < 0.05)
+#============================================================================
 # which metabolites are significant (adj p < 0.05)
 results$significant <- results$p_adj < adj_pval_max
 
@@ -452,10 +483,12 @@ results_wide <- results_wide[which(rowSums(results_wide, na.rm = T) > 0), ]
 
 # plot upset plot
 upset(results_wide, intersect = unique(results$comparison))
-ggsave(paste0(prefix, "upset_signif_lip_adj.png"), device = "png", dpi = 300, units = "in", width = 12, height = 6)
+ggsave(paste0(prefix, "upset_signif_met_adj.png"), device = "png", dpi = 300, units = "in", width = 12, height = 6)
 
 
-# DIFFERENTIALLY ABUNDANT METABOLITES
+#============================================================================
+# DIFFERENTIALLY ABUNDANT METABOLITES (p < 0.05)
+#============================================================================
 # using unadjusted p values
 # upregulated or downregulated?
 results[log2FC > l2fc_max & p_value < pval_max, direction := "Increased"][log2FC < l2fc_min & p_value < pval_max, direction := "Decreased"]
@@ -493,10 +526,10 @@ ggplot(significantcounts, aes(x = comparison, y = N)) +
 ggsave(paste0(prefix, "diff_abund_unadj.png"), device = "png", dpi = 300, units = "in", width = 12, height = 6)
 
 
-# DIFFERENTIALLY ABUNDANT METABOLITES
+#============================================================================
+# DIFFERENTIALLY ABUNDANT METABOLITES (adj p < 0.05)
+#============================================================================
 # using adj p values
-#upregulated <- results[log2FC > l2fc_max & p_adj < adj_pval_max, ]
-#downregulated <- results[log2FC < l2fc_min & p_adj < adj_pval_max, ]
 results[, direction := NULL][log2FC > l2fc_max & p_adj < adj_pval_max, direction := "Increased"][log2FC < l2fc_min & p_adj < adj_pval_max, direction := "Decreased"]
 
 # count number of up/down regulated metabolites using table
@@ -531,8 +564,9 @@ ggplot(significantcounts, aes(x = comparison, y = N)) +
   labs(x = "Comparison", y = "Num. of Sig. Changes")
 ggsave(paste0(prefix, "diff_abund_adj.png"), device = "png", dpi = 300, units = "in", width = 12, height = 6)
 
-
+#============================================================================
 # HIERARCHICAL CLUSTERING HEATMAP
+#============================================================================
 # plotting heatmap for each comparison
 # NOTE: This assumes equal number of replicates per sample group being compared
 hm_cols <- colorRampPalette(c("blue","yellow","red"))(50)
@@ -561,7 +595,9 @@ for (i in seq_along(comparisons[,1])) {
 }
 
 
+#============================================================================
 # PCA PER GROUP COMPARISON
+#============================================================================
 pca_plots <- vector("list", length(comparisons[,1]))
 
 for (i in seq_along(comparisons[,1])) {
@@ -594,7 +630,9 @@ for (i in seq_along(comparisons[,1])) {
 }
 
 
+#============================================================================
 # QC PLOT OF CVs
+#============================================================================
 cv_data <- met_data_stats[, .(cv = (sd(norm_area, na.rm = T) / mean(norm_area, na.rm = T) * 100)), by = .(sample_type, component_name)]
 cv_med <- cv_data[, .(med_cv = median(cv)), by = .(sample_type)]
 
@@ -607,7 +645,9 @@ ggplot(cv_data, aes(x = cv, fill = sample_type)) +
 ggsave(paste0(prefix, "cv_plot.png"), device = "png", dpi = 300, units = "in", width = 12, height = 6)
 
 
+#============================================================================
 # QC HEATMAP OF MISSINGNESS PER SAMPLE
+#============================================================================
 met_data_missing <- sapply(met_data_subquant[, 2:ncol(met_data_subquant)], is.na)
 row.names(met_data_missing) <- met_data_subquant$component_name
 met_data_missing[met_data_missing == TRUE] <- 1
@@ -620,7 +660,9 @@ legend(x = 0, y = 1, legend = c("Missing value", "Valid value"), fill = c("white
 dev.off()
 
 
+#============================================================================
 # FILTERED METABOLITES
+#============================================================================
 # This is the same function that would filter out lipids/metabolites missing in 2/3 of a sample group, but in this case selects for those lipids that are missing
 # Function to remove lipids/metabolites where 2/3 of replicates of one group are missing within a paired comparison
 filtered_met <- melt(norm_met_data_metabo, id.vars = 1:2, variable.name = "component_name", value.name = "norm_area")
@@ -632,13 +674,13 @@ for (i in seq_along(comparisons[,1])) {
   # select data for groups within comparison
   group_data <- filtered_met[sample_type %in% c(comparisons[i,2], comparisons[i,3])]
   
-  # count how many lipids per sample group are missing, and how many samples there are per group
+  # count how many lipids/metabolites per sample group are missing, and how many samples there are per group
   group_1_ct <- length(unique(group_data[sample_type == comparisons[i,2]]$sample_name)) # number of replicates in group 1
   group_2_ct <- length(unique(group_data[sample_type == comparisons[i,3]]$sample_name)) # number of replicates in group 2
   missing_ct <- group_data[is.na(norm_area), .N, by = .(sample_type, component_name)] # count number of missing values per metabolite/lipid
   met_remove <- unique(as.character(missing_ct[N >= ((2/3) * group_1_ct) | N >= ((2/3) * group_2_ct)]$component_name)) # identify which lipids/metabolites are missing in at least 2/3 of either sample group
   
-  # select the lipids that are missing for the particular groups from the filtered_met table and add to filtering table list
+  # select the lipids/metabolites that are missing for the particular groups from the filtered_met table and add to filtering table list
   filtering_table[[i]] <- filtered_met[sample_type %in% c(comparisons[i,2], comparisons[i,3]) & (component_name %in% met_remove), ]
   
 }
@@ -657,7 +699,7 @@ filtered_met <- rbindlist(filtering_table)
 
 filtered_met <- unique(filtered_met)
 
-# write filtered lipid results to file
+# write filtered lipid/metabolite results to file
 write.table(filtered_met, paste0(prefix,"filtered.txt"), quote = F, row.names = F, sep = "\t")
 
 
@@ -678,6 +720,13 @@ for (i in seq_along(fc_groups[,1])) {
   
   fc_met <- met_data_stats[sample_type %in% c(comparisons[comparisons[,1] == fc_groups[i,2],c(2,3)], comparisons[comparisons[,1] == fc_groups[i,3],c(2,3)]) &
                                   component_name %in% fc_met]
+
+  # remove metabolites not found in all four sample groups
+  no_of_grps <- length(unique(fc_met$sample_name))
+  fc_met_count <- fc_met[, .N, by = .(component_name)]
+  fc_met_count_remove <- as.vector(fc_met_count[N < no_of_grps]$component_name)
+  
+  fc_met <- fc_met[!(component_name %in% fc_lipid_count_remove)]
   
   # one-way ANOVA between the two group comparison groups
   p_anova <- fc_met %>% 

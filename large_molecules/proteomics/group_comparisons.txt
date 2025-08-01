@@ -1,0 +1,7 @@
+comparisons	group_1	group_2
+Group 27 vs Group 30	Group 27	Group 30
+Group 27 vs Group 33	Group 27	Group 33
+Group 27 vs Group 36	Group 27	Group 36
+Group 30 vs Group 33	Group 30	Group 33
+Group 30 vs Group 36	Group 30	Group 36
+Group 33 vs Group 36	Group 33	Group 36
