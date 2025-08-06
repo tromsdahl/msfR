@@ -35,3 +35,7 @@ The workflows are separated between **LARGE MOLECULES** and **SMALL MOLECULES**.
 2. The data will need to be converted to a .txt file with the metadata added (See wiki for more information)
 3. Prior to doing statistical analysis, first perform a Data Quality Check (DQC) to ensure the data was acquired correctly.
 4. Once the DQC has passed, then perform the data analysis workflow and follow the individual instructions for that workflow
+
+## ACKNOWLEDGEMENTS
+### CPRIT FUNDING
+<span style="color:red;">MSF is supported in part by the Cancer Prevention Research Institute of Texas (CPRIT) grants RP190682 and RP250644. By using MSF services or the resources of this repository, you are agreeing to acknowledge this funding in any publications created that use the data acquired and provided by MSF!</span>
